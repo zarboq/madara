@@ -185,3 +185,20 @@ pub fn run() -> sc_cli::Result<()> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use sc_cli::{SubstrateCli};
+
+    #[test]
+    fn run_key() {
+        let cli = Cli::from_iter(&["", "key", "inspect", "Alice"]);
+        match &cli.subcommand {
+            Some(Subcommand::Key(cmd)) => {
+                assert!(cmd.run(&cli).is_ok());
+            },
+            _ => panic!("Expected Key subcommand"),
+        };
+    }
+}

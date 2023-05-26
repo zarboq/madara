@@ -288,3 +288,18 @@ fn testnet_genesis(
         },
     }
 }
+
+#[cfg(test)]
+mod test {
+	use sc_service::ChainSpec;
+
+use super::*;
+
+	#[test]
+	fn test_testnet_genesis() {
+		let local_testnet_config = local_testnet_config().unwrap();
+		assert_eq!(local_testnet_config.id(), "local_testnet");
+		assert_eq!(local_testnet_config.name(), "Local Testnet");
+		assert_eq!(local_testnet_config.chain_type(), ChainType::Local);
+	}
+}

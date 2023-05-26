@@ -66,3 +66,19 @@ pub enum Subcommand {
     /// Db meta columns information.
     ChainInfo(sc_cli::ChainInfoCmd),
 }
+
+#[cfg(test)]
+mod tests {
+    use std::process::Command;
+
+    #[test]
+    fn test_key_generate() {
+        let output = Command::new("../../target/release/madara")
+                         .arg("key")
+                         .arg("generate")
+                         .output()
+                         .expect("Failed to execute command");
+        assert!(output.status.success());
+        assert!(String::from_utf8_lossy(&output.stdout).contains("Secret phrase: "));
+    }
+}
