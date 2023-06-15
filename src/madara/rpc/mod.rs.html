@@ -85,6 +85,10 @@
 <a href="#85" id="85">85</a>
 <a href="#86" id="86">86</a>
 <a href="#87" id="87">87</a>
+<a href="#88" id="88">88</a>
+<a href="#89" id="89">89</a>
+<a href="#90" id="90">90</a>
+<a href="#91" id="91">91</a>
 </pre><pre class="rust"><code><span class="doccomment">//! A collection of node-specific RPC methods.
 //! Substrate provides the `sc-rpc` crate, which defines the core RPC layer
 //! used by Substrate nodes. This file extends those RPC definitions with
@@ -98,11 +102,12 @@
 <span class="kw">use </span>futures::channel::mpsc;
 <span class="kw">use </span>jsonrpsee::RpcModule;
 <span class="kw">use </span>madara_runtime::opaque::Block;
-<span class="kw">use </span>madara_runtime::{AccountId, Balance, Hash, Index};
+<span class="kw">use </span>madara_runtime::{AccountId, Hash, Index};
 <span class="kw">use </span>pallet_starknet::runtime_api::StarknetRuntimeApi;
 <span class="kw">use </span>sc_client_api::{Backend, StorageProvider};
 <span class="kw">use </span>sc_consensus_manual_seal::rpc::EngineCommand;
 <span class="kw">pub use </span>sc_rpc_api::DenyUnsafe;
+<span class="kw">use </span>sc_transaction_pool::{ChainApi, Pool};
 <span class="kw">use </span>sc_transaction_pool_api::TransactionPool;
 <span class="kw">use </span>sp_api::ProvideRuntimeApi;
 <span class="kw">use </span>sp_block_builder::BlockBuilder;
@@ -110,11 +115,13 @@
 <span class="kw">pub use </span>starknet::StarknetDeps;
 
 <span class="doccomment">/// Full client dependencies.
-</span><span class="kw">pub struct </span>FullDeps&lt;C, P&gt; {
+</span><span class="kw">pub struct </span>FullDeps&lt;A: ChainApi, C, P&gt; {
     <span class="doccomment">/// The client instance to use.
     </span><span class="kw">pub </span>client: Arc&lt;C&gt;,
     <span class="doccomment">/// Transaction pool instance.
     </span><span class="kw">pub </span>pool: Arc&lt;P&gt;,
+    <span class="doccomment">/// Extrinsic pool graph instance.
+    </span><span class="kw">pub </span>graph: Arc&lt;Pool&lt;A&gt;&gt;,
     <span class="doccomment">/// Whether to deny unsafe calls
     </span><span class="kw">pub </span>deny_unsafe: DenyUnsafe,
     <span class="doccomment">/// Manual seal command sink
@@ -124,13 +131,15 @@
 }
 
 <span class="doccomment">/// Instantiate all full RPC extensions.
-</span><span class="kw">pub fn </span>create_full&lt;C, P, BE&gt;(deps: FullDeps&lt;C, P&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;RpcModule&lt;()&gt;, Box&lt;<span class="kw">dyn </span>std::error::Error + Send + Sync&gt;&gt;
+</span><span class="kw">pub fn </span>create_full&lt;A, C, P, BE&gt;(
+    deps: FullDeps&lt;A, C, P&gt;,
+) -&gt; <span class="prelude-ty">Result</span>&lt;RpcModule&lt;()&gt;, Box&lt;<span class="kw">dyn </span>std::error::Error + Send + Sync&gt;&gt;
 <span class="kw">where
-    </span>C: ProvideRuntimeApi&lt;Block&gt;,
+    </span>A: ChainApi&lt;Block = Block&gt; + <span class="lifetime">&#39;static</span>,
+    C: ProvideRuntimeApi&lt;Block&gt;,
     C: HeaderBackend&lt;Block&gt; + HeaderMetadata&lt;Block, Error = BlockChainError&gt; + StorageProvider&lt;Block, BE&gt; + <span class="lifetime">&#39;static</span>,
     C: Send + Sync + <span class="lifetime">&#39;static</span>,
     C::Api: substrate_frame_rpc_system::AccountNonceApi&lt;Block, AccountId, Index&gt;,
-    C::Api: pallet_transaction_payment_rpc::TransactionPaymentRuntimeApi&lt;Block, Balance&gt;,
     C::Api: BlockBuilder&lt;Block&gt;,
     C::Api: pallet_starknet::runtime_api::StarknetRuntimeApi&lt;Block&gt;
         + pallet_starknet::runtime_api::ConvertTransactionRuntimeApi&lt;Block&gt;,
@@ -138,23 +147,22 @@
     BE: Backend&lt;Block&gt; + <span class="lifetime">&#39;static</span>,
 {
     <span class="kw">use </span>mc_rpc::{Starknet, StarknetRpcApiServer};
-    <span class="kw">use </span>pallet_transaction_payment_rpc::{TransactionPayment, TransactionPaymentApiServer};
     <span class="kw">use </span>sc_consensus_manual_seal::rpc::{ManualSeal, ManualSealApiServer};
     <span class="kw">use </span>substrate_frame_rpc_system::{System, SystemApiServer};
 
     <span class="kw">let </span><span class="kw-2">mut </span>module = RpcModule::new(());
-    <span class="kw">let </span>FullDeps { client, pool, deny_unsafe, starknet: starknet_params, command_sink } = deps;
+    <span class="kw">let </span>FullDeps { client, pool, deny_unsafe, starknet: starknet_params, command_sink, graph } = deps;
 
     <span class="kw">let </span>hasher = client.runtime_api().get_hasher(client.info().best_hash)<span class="question-mark">?</span>.into();
 
     module.merge(System::new(client.clone(), pool.clone(), deny_unsafe).into_rpc())<span class="question-mark">?</span>;
-    module.merge(TransactionPayment::new(client.clone()).into_rpc())<span class="question-mark">?</span>;
     module.merge(
         Starknet::new(
             client,
             starknet_params.madara_backend,
             starknet_params.overrides,
             pool,
+            graph,
             starknet_params.sync_service,
             starknet_params.starting_block,
             hasher,
