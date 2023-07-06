@@ -557,6 +557,45 @@
 <a href="#557" id="557">557</a>
 <a href="#558" id="558">558</a>
 <a href="#559" id="559">559</a>
+<a href="#560" id="560">560</a>
+<a href="#561" id="561">561</a>
+<a href="#562" id="562">562</a>
+<a href="#563" id="563">563</a>
+<a href="#564" id="564">564</a>
+<a href="#565" id="565">565</a>
+<a href="#566" id="566">566</a>
+<a href="#567" id="567">567</a>
+<a href="#568" id="568">568</a>
+<a href="#569" id="569">569</a>
+<a href="#570" id="570">570</a>
+<a href="#571" id="571">571</a>
+<a href="#572" id="572">572</a>
+<a href="#573" id="573">573</a>
+<a href="#574" id="574">574</a>
+<a href="#575" id="575">575</a>
+<a href="#576" id="576">576</a>
+<a href="#577" id="577">577</a>
+<a href="#578" id="578">578</a>
+<a href="#579" id="579">579</a>
+<a href="#580" id="580">580</a>
+<a href="#581" id="581">581</a>
+<a href="#582" id="582">582</a>
+<a href="#583" id="583">583</a>
+<a href="#584" id="584">584</a>
+<a href="#585" id="585">585</a>
+<a href="#586" id="586">586</a>
+<a href="#587" id="587">587</a>
+<a href="#588" id="588">588</a>
+<a href="#589" id="589">589</a>
+<a href="#590" id="590">590</a>
+<a href="#591" id="591">591</a>
+<a href="#592" id="592">592</a>
+<a href="#593" id="593">593</a>
+<a href="#594" id="594">594</a>
+<a href="#595" id="595">595</a>
+<a href="#596" id="596">596</a>
+<a href="#597" id="597">597</a>
+<a href="#598" id="598">598</a>
 </pre><pre class="rust"><code><span class="doccomment">//! Service and ServiceFactory implementation. Specialized wrapper over substrate service.
 
 </span><span class="kw">use </span>std::cell::RefCell;
@@ -571,23 +610,29 @@
 <span class="kw">use </span>mc_block_proposer::ProposerFactory;
 <span class="kw">use </span>mc_mapping_sync::MappingSyncWorker;
 <span class="kw">use </span>mc_storage::overrides_handle;
+<span class="kw">use </span>mc_transaction_pool::FullPool;
+<span class="kw">use </span>mp_starknet::sequencer_address::{
+    InherentDataProvider <span class="kw">as </span>SeqAddrInherentDataProvider, DEFAULT_SEQUENCER_ADDRESS, SEQ_ADDR_STORAGE_KEY,
+};
 <span class="kw">use </span>pallet_starknet::runtime_api::StarknetRuntimeApi;
 <span class="kw">use </span>prometheus_endpoint::Registry;
-<span class="kw">use </span>sc_client_api::{BlockBackend, BlockchainEvents, HeaderBackend};
+<span class="kw">use </span>sc_client_api::{Backend, BlockBackend, BlockchainEvents, HeaderBackend};
 <span class="kw">use </span>sc_consensus::BasicQueue;
 <span class="kw">use </span>sc_consensus_aura::{SlotProportion, StartAuraParams};
 <span class="kw">use </span>sc_consensus_grandpa::{GrandpaBlockImport, SharedVoterState};
 <span class="kw">pub use </span>sc_executor::NativeElseWasmExecutor;
 <span class="kw">use </span>sc_service::error::Error <span class="kw">as </span>ServiceError;
-<span class="kw">use </span>sc_service::{Configuration, TaskManager, WarpSyncParams};
+<span class="kw">use </span>sc_service::{new_db_backend, Configuration, TaskManager, WarpSyncParams};
 <span class="kw">use </span>sc_telemetry::{Telemetry, TelemetryHandle, TelemetryWorker};
-<span class="kw">use </span>sc_transaction_pool::FullPool;
+<span class="kw">use </span>sp_api::offchain::OffchainStorage;
 <span class="kw">use </span>sp_api::{ConstructRuntimeApi, ProvideRuntimeApi, TransactionFor};
 <span class="kw">use </span>sp_consensus_aura::sr25519::AuthorityPair <span class="kw">as </span>AuraPair;
+<span class="kw">use </span>sp_offchain::STORAGE_PREFIX;
 <span class="kw">use </span>sp_runtime::traits::BlakeTwo256;
 <span class="kw">use </span>sp_trie::PrefixedMemoryDB;
 
 <span class="kw">use </span><span class="kw">crate</span>::cli::Sealing;
+<span class="kw">use </span><span class="kw">crate</span>::genesis_block::MadaraGenesisBlockBuilder;
 <span class="kw">use </span><span class="kw">crate</span>::rpc::StarknetDeps;
 <span class="kw">use </span><span class="kw">crate</span>::starknet::{db_config_dir, MadaraBackend};
 <span class="comment">// Our native executor instance.
@@ -627,7 +672,7 @@
         FullBackend,
         FullSelectChain,
         sc_consensus::DefaultImportQueue&lt;Block, FullClient&gt;,
-        sc_transaction_pool::FullPool&lt;Block, FullClient&gt;,
+        mc_transaction_pool::FullPool&lt;Block, FullClient&gt;,
         (
             BoxBlockImport&lt;FullClient&gt;,
             sc_consensus_grandpa::LinkHalf&lt;Block, FullClient, FullSelectChain&gt;,
@@ -662,11 +707,29 @@
 
     <span class="kw">let </span>executor = sc_service::new_native_or_wasm_executor(config);
 
-    <span class="kw">let </span>(client, backend, keystore_container, task_manager) = sc_service::new_full_parts::&lt;Block, RuntimeApi, <span class="kw">_</span>&gt;(
+    <span class="kw">let </span>backend = new_db_backend(config.db_config())<span class="question-mark">?</span>;
+
+    <span class="kw">let </span>genesis_block_builder = MadaraGenesisBlockBuilder::&lt;Block, <span class="kw">_</span>, <span class="kw">_</span>&gt;::new(
+        config.chain_spec.as_storage_builder(),
+        <span class="bool-val">true</span>,
+        backend.clone(),
+        executor.clone(),
+    )
+    .unwrap();
+
+    <span class="kw">let </span>(client, backend, keystore_container, task_manager) = sc_service::new_full_parts_with_genesis_builder::&lt;
+        Block,
+        RuntimeApi,
+        <span class="kw">_</span>,
+        MadaraGenesisBlockBuilder&lt;Block, FullBackend, NativeElseWasmExecutor&lt;ExecutorDispatch&gt;&gt;,
+    &gt;(
         config,
         telemetry.as_ref().map(|(<span class="kw">_</span>, telemetry)| telemetry.handle()),
         executor,
+        backend,
+        genesis_block_builder,
     )<span class="question-mark">?</span>;
+
     <span class="kw">let </span>client = Arc::new(client);
 
     <span class="kw">let </span>telemetry = telemetry.map(|(worker, telemetry)| {
@@ -676,8 +739,8 @@
 
     <span class="kw">let </span>select_chain = sc_consensus::LongestChain::new(backend.clone());
 
-    <span class="kw">let </span>transaction_pool = sc_transaction_pool::BasicPool::new_full(
-        config.transaction_pool.clone(),
+    <span class="kw">let </span>transaction_pool = mc_transaction_pool::BasicPool::new_full(
+        mc_transaction_pool::Options::from(config.transaction_pool.clone()),
         config.role.is_authority().into(),
         config.prometheus_registry(),
         task_manager.spawn_essential_handle(),
@@ -692,8 +755,6 @@
     )<span class="question-mark">?</span>;
 
     <span class="kw">let </span>madara_backend = Arc::new(MadaraBackend::open(<span class="kw-2">&amp;</span>config.database, <span class="kw-2">&amp;</span>db_config_dir(config))<span class="question-mark">?</span>);
-
-    <span class="kw">let </span>_slot_duration = sc_consensus_aura::slot_duration(<span class="kw-2">&amp;*</span>client)<span class="question-mark">?</span>;
 
     <span class="kw">let </span>(import_queue, block_import) = build_import_queue(
         client.clone(),
@@ -730,6 +791,7 @@
     RuntimeApi: Send + Sync + <span class="lifetime">&#39;static</span>,
 {
     <span class="kw">let </span>slot_duration = sc_consensus_aura::slot_duration(<span class="kw-2">&amp;*</span>client)<span class="question-mark">?</span>;
+
     <span class="kw">let </span>create_inherent_data_providers = <span class="kw">move </span>|<span class="kw">_</span>, ()| <span class="kw">async move </span>{
         <span class="kw">let </span>timestamp = sp_timestamp::InherentDataProvider::from_system_time();
         <span class="kw">let </span>slot = sp_consensus_aura::inherents::InherentDataProvider::from_timestamp_and_slot_duration(
@@ -896,7 +958,7 @@
             client.import_notification_stream(),
             Duration::new(<span class="number">6</span>, <span class="number">0</span>),
             client.clone(),
-            backend,
+            backend.clone(),
             madara_backend,
             <span class="number">3</span>,
             <span class="number">0</span>,
@@ -940,15 +1002,31 @@
             select_chain,
             block_import,
             proposer_factory,
-            create_inherent_data_providers: <span class="kw">move </span>|<span class="kw">_</span>, ()| <span class="kw">async move </span>{
-                <span class="kw">let </span>timestamp = sp_timestamp::InherentDataProvider::from_system_time();
+            create_inherent_data_providers: <span class="kw">move </span>|<span class="kw">_</span>, ()| {
+                <span class="kw">let </span>offchain_storage = backend.offchain_storage();
+                <span class="kw">async move </span>{
+                    <span class="kw">let </span>timestamp = sp_timestamp::InherentDataProvider::from_system_time();
 
-                <span class="kw">let </span>slot = sp_consensus_aura::inherents::InherentDataProvider::from_timestamp_and_slot_duration(
-                    <span class="kw-2">*</span>timestamp,
-                    slot_duration,
-                );
+                    <span class="kw">let </span>slot = sp_consensus_aura::inherents::InherentDataProvider::from_timestamp_and_slot_duration(
+                        <span class="kw-2">*</span>timestamp,
+                        slot_duration,
+                    );
 
-                <span class="prelude-val">Ok</span>((slot, timestamp))
+                    <span class="kw">let </span>ocw_storage = offchain_storage.clone();
+                    <span class="kw">let </span>prefix = <span class="kw-2">&amp;</span>STORAGE_PREFIX;
+                    <span class="kw">let </span>key = SEQ_ADDR_STORAGE_KEY;
+
+                    <span class="kw">let </span>sequencer_address = <span class="kw">if let </span><span class="prelude-val">Some</span>(storage) = ocw_storage {
+                        SeqAddrInherentDataProvider::try_from(
+                            storage.get(prefix, key).unwrap_or(DEFAULT_SEQUENCER_ADDRESS.to_vec()),
+                        )
+                        .unwrap_or_default()
+                    } <span class="kw">else </span>{
+                        SeqAddrInherentDataProvider::default()
+                    };
+
+                    <span class="prelude-val">Ok</span>((slot, timestamp, sequencer_address))
+                }
             },
             force_authoring,
             backoff_authoring_blocks,
